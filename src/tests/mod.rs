@@ -1,28 +1,31 @@
 
-
-use super::*;
-use rand;
-use rand::distributions::{Distribution, Standard};
-use rand::SeedableRng;
-use rand_pcg::{Lcg64Xsh32, Pcg32};
-use std::cmp::min;
-
-use crate::symbols::{gf_tables, Symbol, SymbolID};
-use crate::system::equation::Equation;
-use crate::system::equation::EquationBounds::Bounds;
+#[cfg(test)]
+use  {
+    rand,
+    rand_pcg::Lcg64Xsh32,
+    rand_pcg::Pcg32,
+    rand::distributions::{Distribution, Standard},
+    rand::SeedableRng,
+    std::cmp::min,
+    crate::symbols::{gf_tables, Symbol, SymbolID},
+    crate::system::equation::Equation,
+    crate::system::equation::EquationBounds::Bounds,
+};
 
 #[cfg(test)]
-
 pub fn get_new_rng() -> Lcg64Xsh32 {
     Pcg32::seed_from_u64(42)
 }
 
+#[cfg(test)]
 pub fn get_random_vec(rng: &mut Lcg64Xsh32, size: usize) -> Vec<u8> {
     Standard.sample_iter(rng).take(size).collect()
 }
 
+#[cfg(test)]
 const SYMBOL_SIZE: usize = 1500;
 
+#[cfg(test)]
 pub fn get_equation(
     rng: &mut Lcg64Xsh32,
     first_id: SymbolID,

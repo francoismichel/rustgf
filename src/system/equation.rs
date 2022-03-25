@@ -37,7 +37,7 @@ impl Equation {
         if coefs.len() != constant_term.n_protected_symbols as usize {
             coefs.resize(constant_term.n_protected_symbols as usize, 0u8);
         }
-        let mut eq = Equation {
+        let eq = Equation {
             coefs,
             constant_term,
             bounds
@@ -173,7 +173,7 @@ impl Equation {
         match self.bounds() {
             Bounds {
                 pivot,
-                last_nonzero_id,
+                last_nonzero_id: _,
             } => {
                 let pivot_coef = self.get_coef(*pivot);
                 if pivot_coef != 1 {
@@ -352,6 +352,8 @@ impl Equation {
         }
     }
 
+
+    #[cfg(test)]
     fn clone(&self) -> Equation {
         return Equation {
             coefs: self.coefs.to_vec(),

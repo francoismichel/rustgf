@@ -1,6 +1,6 @@
 pub mod equation;
 
-use crate::symbols::{gf_tables, Symbol};
+use crate::symbols::{gf_tables};
 use crate::symbols::SymbolID;
 
 use crate::system::equation::EquationBounds;
@@ -51,7 +51,7 @@ impl System {
             SystemBounds::Bounds {
                 first_equation_pivot_id,
                 last_present_equation_pivot_id,
-                largest_nonzero_id,
+                largest_nonzero_id: _,
             } => {
                 for id in (*first_equation_pivot_id..from).rev() {
                     if let Some(_) = self.equations[(id - *first_equation_pivot_id) as usize] {
@@ -98,7 +98,7 @@ impl System {
     // @brief Add an equation to the system.
     //
     // Returns Some(eq) will be returned if `eq` was removed fom the system as it was occupying the slot of `equation`
-    pub fn add_pivot_equation(&mut self, equation: Equation) -> Result<Option<Equation>, ()> {
+    fn add_pivot_equation(&mut self, equation: Equation) -> Result<Option<Equation>, ()> {
         let mut removed = None;
         if let EquationBounds::Bounds {
             pivot: equation_pivot,
@@ -268,7 +268,7 @@ impl System {
         Ok(removed)
     }
 
-    fn reduce_equation(&self, new_equation: &mut Equation) {
+    fn reduce_equation(&self, new_equation: &mut Equation) -> Result<(), ()> {
             let mut n_non_null_equations = 0;
             for eq_opt in &self.equations {
                 if n_non_null_equations >= self.n_equations {
@@ -280,27 +280,27 @@ impl System {
 
                     if let EquationBounds::Bounds {
                         pivot: eq_pivot,
-                        last_nonzero_id: eq_last_nonzero_id,
+                        last_nonzero_id: _,
                     } = eq.bounds() {
                         let mut new_equation_pivot_value = None;
                         if let EquationBounds::Bounds {
                             pivot: new_equation_pivot,
-                            last_nonzero_id: new_equation_last_nonzero_id,
+                            last_nonzero_id: _,
                         } = new_equation.bounds() {
                             new_equation_pivot_value = Some(*new_equation_pivot);
                         }
-                        if let Some(new_equation_pivot_value) = new_equation_pivot_value {
+                        if let Some(_) = new_equation_pivot_value {
                             let coef = new_equation.get_coef(*eq_pivot);
                             if coef != 0 {
                                 // reduce this coef in the new eq
-                                let mul = gf_tables::mul(gf_tables::inv(eq.get_coef(new_equation_pivot_value)), coef);
                                 new_equation.mul(gf_tables::mul(gf_tables::inv(coef), eq.get_coef(*eq_pivot)));
-                                new_equation.add(eq);
+                                new_equation.add(eq)?;
                             }
                         }
                     }
                 }
             }
+        Ok(())
 
     }
 
@@ -316,7 +316,7 @@ impl System {
 
         new_equation.recompute_bounds();
 
-        self.reduce_equation(&mut new_equation);
+        self.reduce_equation(&mut new_equation)?;
         if new_equation.has_one_id() {
             new_equation.normalize_pivot();
             if let EquationBounds::Bounds {
@@ -331,7 +331,7 @@ impl System {
 
         if let EquationBounds::Bounds {
             pivot: equation_pivot,
-            last_nonzero_id: equation_last_nonzero_id,
+            last_nonzero_id: _,
         } = new_equation.bounds()
         {
             let first_id = *equation_pivot;
@@ -379,7 +379,7 @@ impl System {
 
     pub fn take(&mut self, id: SymbolID) -> Option<Vec<u8>> {
         if let SystemBounds::Bounds {
-            first_equation_pivot_id, last_present_equation_pivot_id, largest_nonzero_id
+            first_equation_pivot_id, last_present_equation_pivot_id, largest_nonzero_id: _
         } = self.bounds {
             if id < first_equation_pivot_id || id > last_present_equation_pivot_id {
                 return None;
