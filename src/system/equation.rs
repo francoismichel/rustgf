@@ -2,6 +2,14 @@ use crate::symbols::arithmetic;
 use crate::symbols::Symbol;
 use crate::symbols::SymbolID;
 use crate::system::equation::EquationBounds::{Bounds, EmptyBounds};
+use crate::system::equation::EquationError::{BadSymbol, InternalError, OutOfEquation};
+
+#[derive(Debug)]
+pub enum EquationError {
+    BadSymbol,
+    OutOfEquation,
+    InternalError,
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum EquationBounds {
@@ -108,8 +116,9 @@ impl Equation {
             }
             self.constant_term.first_id = smallest_pivot;
             self.constant_term.n_protected_symbols = largest_nonzero_coef_id + 1 - smallest_pivot;
-            // self.coefs.resize(self.constant_term.n_protected_symbols as usize, 0);
-            self.constant_term.n_protected_symbols = self.coefs.len() as u32;
+            self.coefs.resize(self.constant_term.n_protected_symbols as usize, 0);
+
+            // self.constant_term.n_protected_symbols = self.coefs.len() as u64;
             // now we're back at a normal state where self.constant_term.first_id is at index 0 of self.coefs
             // in addition, pivot is at index 0 of self.coefs (which does not necessarily need to be the case)
 
@@ -155,6 +164,26 @@ impl Equation {
         self.constant_term.add_mul(coef, &other.constant_term);
     }
 
+    pub fn reduce(&mut self, symbol: &Symbol) -> Result<(), EquationError> {
+        if symbol.n_protected_symbols != 1 {
+            return Err(BadSymbol);
+        }
+        match self.bounds() {
+            EquationBounds::EmptyBounds => Ok(()),
+            EquationBounds::Bounds { pivot, last_nonzero_id } => {
+                let (pivot, last_nonzero_id) = (*pivot, *last_nonzero_id);
+                if symbol.first_id < pivot || last_nonzero_id < symbol.first_id {
+                    return Err(OutOfEquation);
+                }
+                self.constant_term.add_mul(self.get_coef(symbol.first_id), symbol);
+                match self.set_coef(symbol.first_id, 0) {
+                    Err(()) => Err(InternalError),
+                    Ok(()) => Ok(()),
+                }
+            }
+        }
+    }
+
     pub fn bounds(&self) -> &EquationBounds {
         &self.bounds
     }
@@ -190,7 +219,7 @@ impl Equation {
             .iter()
             .enumerate()
         {
-            let idx = i as u32;
+            let idx = i as u64;
             if *coef != 0u8 {
                 let new_pivot = idx + self.constant_term.first_id;
                 match &mut self.bounds {
@@ -239,7 +268,7 @@ impl Equation {
             .enumerate()
             .rev()
         {
-            let idx = i as u32;
+            let idx = i as u64;
             if *coef != 0u8 {
                 let last = idx + self.constant_term.first_id;
                 match &mut self.bounds {

@@ -29,7 +29,7 @@ const SYMBOL_SIZE: usize = 1500;
 pub fn get_equation(
     rng: &mut Lcg64Xsh32,
     first_id: SymbolID,
-    n_protected_symbols: u32,
+    n_protected_symbols: u64,
     first_nonzero_id: SymbolID,
     last_nonzero_id: SymbolID,
 ) -> Equation {

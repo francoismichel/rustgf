@@ -1,17 +1,17 @@
 pub mod arithmetic;
 pub mod gf_tables;
 
-pub type SymbolID = u32;
+pub type SymbolID = u64;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Symbol {
     pub first_id: SymbolID,
-    pub n_protected_symbols: u32, // states how many symbols have been combined to create this symbol
+    pub n_protected_symbols: u64, // states how many symbols have been combined to create this symbol
     data: Vec<u8>,
 }
 
 impl Symbol {
-    pub fn new(first_id: SymbolID, n_protected_symbols: u32, data: Vec<u8>) -> Symbol {
+    pub fn new(first_id: SymbolID, n_protected_symbols: u64, data: Vec<u8>) -> Symbol {
         Symbol {
             first_id,
             n_protected_symbols,
@@ -52,7 +52,7 @@ impl Symbol {
     }
 
     pub fn n_protected_symbols(&self) -> SymbolID {
-        self.n_protected_symbols
+        self.n_protected_symbols as SymbolID
     }
 
     pub fn get_data(&self) -> &Vec<u8> {

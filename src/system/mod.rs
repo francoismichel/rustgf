@@ -6,27 +6,33 @@ use crate::symbols::SymbolID;
 use crate::system::equation::EquationBounds;
 use crate::system::SystemBounds::EmptyBounds;
 use equation::Equation;
+use crate::system::SystemError::{InternalError, UnusedEquation};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SystemBounds {
     Bounds {
-        first_equation_pivot_id: SymbolID,
+        first_equation_pivot_id: SymbolID,  // this first equation may not be present in the system
         last_present_equation_pivot_id: SymbolID,
         largest_nonzero_id: SymbolID,
     },
     EmptyBounds,
 }
 
+pub enum SystemError {
+    UnusedEquation,
+    InternalError(String),
+}
+
 pub struct System {
     bounds: SystemBounds,
-    max_equations: u32,
-    n_equations: u32,
+    max_equations: u64,
+    n_equations: u64,
     equations: Vec<Option<Equation>>,
 }
 
 impl System {
     pub fn new() -> System {
-        let max_equations = 1000u32;
+        let max_equations = 10000u64;
         let mut equations = Vec::new();
         equations.resize_with(max_equations as usize, || None);
         System {
@@ -68,7 +74,7 @@ impl System {
 
     fn _compute_largest_symbol_id(&self) -> Result<SymbolID, ()> {
         let mut retval = None;
-        let mut equations_checked = 0u32;
+        let mut equations_checked = 0u64;
 
         for maybe_eq in &self.equations {
             if let Some(eq) = maybe_eq {
@@ -209,7 +215,7 @@ impl System {
                         self.equations[0] = Some(equation);
                     } else {
                         let idx_pos = candidate_pivot - system_first_equation_pivot_id;
-                        if idx_pos > self.max_equations {
+                        if idx_pos >= self.max_equations {
                             return Err(());
                         }
                         let eq_to_insert = if let Some(eq_already_present) =
@@ -265,69 +271,74 @@ impl System {
                 }
             }
         }
+        self.recompute_bounds();
         Ok(removed)
     }
 
     fn reduce_equation(&self, new_equation: &mut Equation) -> Result<(), ()> {
-            let mut n_non_null_equations = 0;
-            for eq_opt in &self.equations {
-                if n_non_null_equations >= self.n_equations {
-                    break;
-                }
+        let mut n_non_null_equations = 0;
+        for eq_opt in &self.equations {
+            if n_non_null_equations >= self.n_equations {
+                break;
+            }
 
-                if let Some(eq) = eq_opt {
-                    n_non_null_equations += 1;
+            if let Some(eq) = eq_opt {
+                n_non_null_equations += 1;
 
+                if let EquationBounds::Bounds {
+                    pivot: eq_pivot,
+                    last_nonzero_id: _,
+                } = eq.bounds() {
+                    let mut new_equation_pivot_value = None;
                     if let EquationBounds::Bounds {
-                        pivot: eq_pivot,
+                        pivot: new_equation_pivot,
                         last_nonzero_id: _,
-                    } = eq.bounds() {
-                        let mut new_equation_pivot_value = None;
-                        if let EquationBounds::Bounds {
-                            pivot: new_equation_pivot,
-                            last_nonzero_id: _,
-                        } = new_equation.bounds() {
-                            new_equation_pivot_value = Some(*new_equation_pivot);
-                        }
-                        if let Some(_) = new_equation_pivot_value {
-                            let coef = new_equation.get_coef(*eq_pivot);
-                            if coef != 0 {
-                                // reduce this coef in the new eq
-                                new_equation.mul(gf_tables::mul(gf_tables::inv(coef), eq.get_coef(*eq_pivot)));
-                                new_equation.add(eq)?;
-                            }
+                    } = new_equation.bounds() {
+                        new_equation_pivot_value = Some(*new_equation_pivot);
+                    }
+                    if let Some(_) = new_equation_pivot_value {
+                        let coef = new_equation.get_coef(*eq_pivot);
+                        if coef != 0 {
+                            // reduce this coef in the new eq
+                            new_equation.mul(gf_tables::mul(gf_tables::inv(coef), eq.get_coef(*eq_pivot)));
+                            new_equation.add(eq)?;
                         }
                     }
                 }
             }
+        }
         Ok(())
 
     }
 
+    fn recompute_bounds(&mut self) {
+        if self.n_equations == 0 {
+            self.bounds = SystemBounds::EmptyBounds;
+        }
+    }
+
     /// adds eq to the system
-    /// without error, a tuple (removed_eq, decoded_symbol_id) is returned. eq is an equation that
-    /// has been removed from the system if it was already occupying eq's pivot position.
-    /// decoded_symbol_id is the id of a newly decoded equation if it exists
+    /// without error, a tuple (removed_eq, decoded_symbol_ids) is returned. removed_eq is an equation that
+    /// has been removed from the system if it was already occupying new_equation's pivot position.
+    /// decoded_symbol_ids are the ids of all the newly decoded equations if they exist
     pub fn add(
         &mut self,
         mut new_equation: Equation,
-    ) -> Result<(Option<Equation>, Vec<SymbolID>), ()> {
+    ) -> Result<(Option<Equation>, Vec<SymbolID>), SystemError> {
         let mut decoded_symbol_ids = Vec::new();
 
         new_equation.recompute_bounds();
 
-        self.reduce_equation(&mut new_equation)?;
-        if new_equation.has_one_id() {
-            new_equation.normalize_pivot();
-            if let EquationBounds::Bounds {
-                pivot: decoded_pivot,
-                ..
-            } = new_equation.bounds() {
-                let decoded_pivot_value = *decoded_pivot;
-                decoded_symbol_ids.push(decoded_pivot_value);
+        match self.reduce_equation(&mut new_equation) {
+            Err(()) => {
+                return Err(InternalError("could not reduce the new equation".to_string()));
             }
+            Ok(()) => ()
         }
 
+        if let EquationBounds::EmptyBounds = new_equation.bounds() {
+            return Err(UnusedEquation);
+        }
 
         if let EquationBounds::Bounds {
             pivot: equation_pivot,
@@ -351,7 +362,12 @@ impl System {
                         let new_equation_coef = new_equation.get_coef(first_id);
                         new_equation.mul(gf_tables::mul(coef, gf_tables::inv(new_equation_coef)));
                         let has_one_id_before_add = eq.has_one_id();
-                        eq.add(&new_equation)?;
+                        match eq.add(&new_equation){
+                            Err(()) => {
+                                return Err(InternalError("could not add the equations".to_string()));
+                            }
+                            Ok(()) => ()
+                        }
                         match eq.bounds() {
                             EquationBounds::Bounds {
                                 pivot: eq_pivot, ..
@@ -365,16 +381,37 @@ impl System {
                                     decoded_symbol_ids.push(decoded_id);
                                 }
                             }
-                            EquationBounds::EmptyBounds => return Err(()),
+                            EquationBounds::EmptyBounds => return Err(InternalError("a newly added equation totally zeroed the coefficients of another one".to_string())),
                         }
                     }
                 }
             }
         }
 
-        let removed = self.add_pivot_equation(new_equation)?;
 
-        Ok((removed, decoded_symbol_ids))
+        if new_equation.has_one_id() {
+            new_equation.normalize_pivot();
+            if let EquationBounds::Bounds {
+                pivot: decoded_pivot,
+                ..
+            } = new_equation.bounds() {
+                let decoded_pivot_value = *decoded_pivot;
+                decoded_symbol_ids.push(decoded_pivot_value);
+            }
+        }
+
+        self.recompute_bounds();
+
+        match self.add_pivot_equation(new_equation) {
+            Err(()) => {
+                Err(InternalError("error when adding new pivot equation".to_string()))
+            }
+            Ok(removed) => {
+                self.recompute_bounds();
+
+                Ok((removed, decoded_symbol_ids))
+            }
+        }
     }
 
     pub fn take(&mut self, id: SymbolID) -> Option<Vec<u8>> {
@@ -385,16 +422,37 @@ impl System {
                 return None;
             }
             let mut retval = self.equations[(id - first_equation_pivot_id) as usize].take()?;
+            self.n_equations -= 1;
             if !retval.has_one_id() {
                 return None;
             }
             retval.normalize_pivot();
+            self.recompute_bounds();
             return Some(retval.constant_term_data());
         }
         return None;
     }
 
-    // TODO: add symbol and generate coefs with given generator ?
+    pub fn print(&self) {
+        let mut n_non_null_equations = 0;
+        println!("System {:?}", self.bounds);
+        if let SystemBounds::Bounds {
+            first_equation_pivot_id, last_present_equation_pivot_id: _last_present_equation_pivot_id, largest_nonzero_id
+        } = self.bounds {
+            for eq in &self.equations {
+                if let Some(eq) = eq {
+                    n_non_null_equations += 1;
+                    for id in first_equation_pivot_id..=largest_nonzero_id {
+                        print!("{} ", eq.get_coef(id));
+                    }
+                    println!();
+                }
+                if n_non_null_equations == self.n_equations {
+                    break;
+                }
+            }
+        }
+    }
 }
 
 
@@ -416,31 +474,29 @@ mod tests {
     }
 
     fn _generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, coefs: Vec<u8>, symbols: &Vec<Symbol>, symbol_size: usize) -> Equation {
-        let mut out_symbol = Symbol::new(first_coef_id, coefs.len() as u32, vec![0; symbol_size]);
+        let mut out_symbol = Symbol::new(first_coef_id, coefs.len() as u64, vec![0; symbol_size]);
         for (i, symbol) in symbols.iter().enumerate() {
             out_symbol.add_mul(coefs[i], &symbols[i]);
         }
         Equation::new(coefs, out_symbol)
     }
 
-    fn generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u32, symbols: &Vec<Symbol>, symbol_size: usize) -> Equation {
+    fn generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u64, symbols: &Vec<Symbol>, symbol_size: usize) -> Equation {
         let coefs = get_random_vec(rng, n_coefs as usize);
         _generate_equation_from_payloads(rng, first_coef_id, coefs, symbols, symbol_size)
     }
 
-    fn generate_equation_from_payloads_with_zeroes(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u32, symbols: &Vec<Symbol>, symbol_size: usize, zeroes_rate: f64, already_solved_rate: f64) -> Equation {
+    fn generate_equation_from_payloads_with_zeroes(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u64, symbols: &Vec<Symbol>, symbol_size: usize, zeroes_rate: f64, already_solved_rate: f64) -> Equation {
         let mut coefs = get_random_vec(rng, n_coefs as usize);
         let already_solved = rng.gen_bool(already_solved_rate);
         let alone_index = rng.gen_range(0..n_coefs) as usize;
         if already_solved {
-            println!("alone index {}", alone_index);
         }
         for (i, coef) in coefs.iter_mut().enumerate() {
             if (already_solved && i != alone_index) || (!already_solved && rng.gen_bool(zeroes_rate)) {
                 *coef = 0;
             }
         }
-        println!("{:?}", coefs);
 
         _generate_equation_from_payloads(rng, first_coef_id, coefs, symbols, symbol_size)
     }
@@ -457,7 +513,7 @@ mod tests {
         let data = get_random_vec(&mut rng, 1500);
         let mut solved_eq = Equation::new(coefs,
                                       Symbol::new(first_id,
-                                                  n_protected_symbols as u32,
+                                                  n_protected_symbols as u64,
                                                   data));
         let mut solved_eq_copy = eq_clone(&solved_eq);
         solved_eq_copy.normalize_pivot();

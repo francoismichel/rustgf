@@ -17,7 +17,7 @@ fn get_random_vec(rng: &mut Lcg64Xsh32, size: usize) -> Vec<u8> {
     Standard.sample_iter(rng).take(size).collect()
 }
 
-fn generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u32, symbols: &Vec<Symbol>, symbol_size: usize) -> Equation {
+fn generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u64, symbols: &Vec<Symbol>, symbol_size: usize) -> Equation {
     let coefs = get_random_vec(rng, n_coefs as usize);
     let mut out_symbol = Symbol::new(first_coef_id, n_coefs, vec![0; symbol_size]);
     for (i, _) in symbols.iter().enumerate() {
