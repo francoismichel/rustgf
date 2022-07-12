@@ -18,6 +18,7 @@ pub enum SystemBounds {
     EmptyBounds,
 }
 
+#[derive(Debug)]
 pub enum SystemError {
     UnusedEquation,
     InternalError(String),
@@ -431,6 +432,93 @@ impl System {
             return Some(retval.constant_term_data());
         }
         return None;
+    }
+
+    fn _recompute_bounds_heavy(&mut self) {
+        if let SystemBounds::Bounds { first_equation_pivot_id, .. } = self.bounds() {
+            let mut new_last_present_equation_pivot_id = None;
+            let mut new_largest_nonzero_id = None;
+            let mut n_non_null_equations = 0;
+            let first_pivot_id = *first_equation_pivot_id;
+            for eq_opt in self.equations.iter_mut().rev() {
+                if let Some(eq) = eq_opt {
+                    if let EquationBounds::Bounds { pivot, last_nonzero_id } = eq.bounds() {
+                        if let None = new_last_present_equation_pivot_id {
+                            new_last_present_equation_pivot_id = Some(*pivot);
+                        }
+                        new_largest_nonzero_id = match new_largest_nonzero_id {
+                            None => Some(*last_nonzero_id),
+                            Some(v) => Some(std::cmp::max(v, *last_nonzero_id)),
+                        };
+                        n_non_null_equations += 1;
+                    } else {
+                        eq_opt.take();
+                    }
+                } 
+            }
+    
+            self.bounds = match (new_largest_nonzero_id, new_last_present_equation_pivot_id) {
+                (Some(largest_nonzero), Some(last_present)) => {
+                    SystemBounds::Bounds { first_equation_pivot_id: first_pivot_id, last_present_equation_pivot_id: last_present, largest_nonzero_id: largest_nonzero }
+                }
+                _ => {
+                    SystemBounds::EmptyBounds
+                }
+            };
+            self.n_equations = n_non_null_equations;
+        }
+
+
+        self.recompute_bounds();
+    }
+
+    /// removes all the equations whose coef for the given id is not zero
+    /// this is useful if we decide to not recover a specific ID, then we 
+    /// just drop the equations that need this id to be solved
+    pub fn drop_id(&mut self, id: SymbolID) {
+        let mut need_to_recompute_bounds = false;
+        if let SystemBounds::Bounds { first_equation_pivot_id, last_present_equation_pivot_id, largest_nonzero_id } = self.bounds() {
+            let (first_equation_pivot_id, last_present_equation_pivot_id, largest_nonzero_id) = (*first_equation_pivot_id, *last_present_equation_pivot_id, *largest_nonzero_id);
+            if id < first_equation_pivot_id {
+                return;
+            }
+            if id > largest_nonzero_id {
+                return;
+            }
+            let mut n_non_null_equations = 0;
+            let n_equations = self.n_equations;
+            for eq_opt in &mut self.equations {
+                if let Some(eq) = eq_opt {
+                    n_non_null_equations += 1;
+                    if eq.get_coef(id) != 0 {
+                        if let EquationBounds::Bounds { pivot, last_nonzero_id } = eq.bounds() {
+                            if *pivot == last_present_equation_pivot_id || *last_nonzero_id == largest_nonzero_id {
+                                need_to_recompute_bounds = true;
+                            }
+                        }
+                        // drop the equation
+                        eq_opt.take();
+                        self.n_equations -= 1;
+                    }
+                }
+                if n_non_null_equations >= n_equations {
+                    if need_to_recompute_bounds {
+                        self._recompute_bounds_heavy();
+                    } else {
+                        self.recompute_bounds();
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        for eq_opt in self.equations.iter_mut() {
+            eq_opt.take();
+        } 
+        self.n_equations = 0;
+        self.bounds = SystemBounds::EmptyBounds;
     }
 
     pub fn print(&self) {
