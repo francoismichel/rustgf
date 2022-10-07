@@ -26,6 +26,20 @@ pub fn add_mul(a: &mut [u8], coef: u8, b: &[u8]) {
     }
 }
 
+pub fn pow(a: u8, mut exp: u8) -> u8 {
+    let mut res = 1;
+    while exp > 1 {
+        if exp & 1 == 0 {
+            res = gf_tables::tables::GF256_MUL_TABLE[res as usize][res as usize];
+            exp >>= 1;
+        } else {
+            res = gf_tables::tables::GF256_MUL_TABLE[res as usize][a as usize];
+            exp -= 1;
+        }
+    }
+    res
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
