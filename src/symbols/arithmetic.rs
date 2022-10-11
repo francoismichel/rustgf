@@ -26,11 +26,11 @@ pub fn add_mul(a: &mut [u8], coef: u8, b: &[u8]) {
     }
 }
 
-pub fn pow(a: u8, mut exp: u8) -> u8 {
-    let mut res = a;
-    while exp > 1 {
+pub fn pow(mut a: u8, mut exp: u8) -> u8 {
+    let mut res = 1;
+    while exp > 0 {
         if exp & 1 == 0 {
-            res = gf_tables::tables::GF256_MUL_TABLE[res as usize][res as usize];
+            a = gf_tables::tables::GF256_MUL_TABLE[a as usize][a as usize];
             exp >>= 1;
         } else {
             res = gf_tables::tables::GF256_MUL_TABLE[res as usize][a as usize];
@@ -42,8 +42,10 @@ pub fn pow(a: u8, mut exp: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
+    use crate::symbols::{arithmetic, gf_tables};
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_pow() {
+        assert_eq!(arithmetic::pow(42, 4), gf_tables::mul(gf_tables::mul(42, 42), gf_tables::mul(42, 42)));
     }
 }

@@ -585,7 +585,6 @@ mod tests {
                 *coef = 0;
             }
         }
-
         _generate_equation_from_payloads(rng, first_coef_id, coefs, symbols, symbol_size)
     }
 
@@ -661,14 +660,22 @@ mod tests {
         let symbol_size = 1500;
         let system_oversize_ratio = 1.1; // we add 20% more equations than symbols as in this tests we have many coefs set to 0
         let mut symbols = Vec::new();
+        let mut n_unused = 0;
         for i in 0..n_symbols {
             symbols.push(Symbol::new(first_id, n_symbols, get_random_vec(&mut rng, symbol_size)));
         }
         let mut decoded_ids: Vec<SymbolID> = Vec::new();
         for i in 0..(((n_symbols as f64)*system_oversize_ratio) as u32) {
             let result = system.add(generate_equation_from_payloads_with_zeroes(&mut rng, first_id, n_symbols, &symbols, symbol_size, 0.3, 0.1));
-            let (removed, mut decoded) = result.unwrap();
-            decoded_ids.append(&mut decoded);
+            match result {
+                Ok((removed, mut decoded)) => {
+                    decoded_ids.append(&mut decoded);
+                }
+                Err(crate::system::SystemError::UnusedEquation) => {
+                    n_unused += 1;
+                }
+                Err(_) => panic!("unexpected error"),
+            }
         }
 
         assert_eq!(decoded_ids.len(), n_symbols as usize);
