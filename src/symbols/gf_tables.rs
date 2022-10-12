@@ -2,8 +2,33 @@ pub fn mul(a: u8, b: u8) -> u8 {
     tables::GF256_MUL_TABLE[a as usize][b as usize]
 }
 
-pub fn pow(a: u8, b: u8) -> u8 {
+pub fn pow_table(a: u8, b: u8) -> u8 {
     tables::GF256_POW_TABLE[a as usize][b as usize]
+}
+
+pub fn pow(mut a: u8, b: usize) -> u8 {
+    if b <= std::u8::MAX as usize {
+        pow_table(a, b as u8)
+    } else {
+        let mut exp = b;
+        let mut res: u8 = 1;
+        while exp > 0 {
+            if exp <= std::u8::MAX as usize {
+                // we can use the table, return res*(a^exp)
+                return tables::GF256_MUL_TABLE[res as usize][pow_table(a, exp as u8) as usize];
+            }
+            if exp & 1 == 0 {
+                // square a and divide the exponent
+                a = tables::GF256_MUL_TABLE[a as usize][a as usize];
+                exp >>= 1;
+            } else {
+                // res = res*a
+                res = tables::GF256_MUL_TABLE[res as usize][a as usize];
+                exp -= 1;
+            }
+        }
+        res
+    }
 }
 
 pub fn pow_exec(mut a: u8, mut exp: u8) -> u8 {
@@ -6712,10 +6737,22 @@ mod tests {
     }
 
     #[test]
-    fn test_pow() {
+    fn test_pow_table() {
         for i in 0..=255 {
             for j in 0..=255 {
-                assert_eq!(pow(i, j), pow_exec(i, j));
+                assert_eq!(pow(i, j), pow_exec(i, j as u8));
+            }
+        }
+    }
+
+    #[test]
+    fn test_large_pow() {
+        for i in 0..=255 {
+            let mut acc = 1;
+            for j in 0..=std::u16::MAX as usize {
+                println!("pow {}^{}", i, j);
+                assert_eq!(pow(i, j), acc);
+                acc = mul(acc, i);
             }
         }
     }
