@@ -516,12 +516,6 @@ impl System {
 
     /// subtracts the ids such that the pivot ID becomes pivot - n
     pub fn saturate_sub_ids(&mut self, mut n: SymbolID) {
-        for eq in &mut self.equations {
-            match eq {
-                Some(eq) => eq.saturate_sub_bounds(n),
-                None => (),
-            }
-        }
         self.bounds = match self.bounds {
             SystemBounds::Bounds { first_equation_pivot_id, last_present_equation_pivot_id, largest_nonzero_id } => {
                 if n > first_equation_pivot_id {
@@ -534,6 +528,29 @@ impl System {
                 }
             }
             SystemBounds::EmptyBounds => SystemBounds::EmptyBounds,
+        };
+        let mut non_null_eq_idx = vec![];
+        let mut n_non_null_equations = 0;
+        for (idx, eq) in self.equations.iter_mut().enumerate() {
+            if n_non_null_equations == self.n_equations {
+                break;
+            }
+            match eq {
+                Some(eq) => {
+                    n_non_null_equations += 1;
+                    eq.saturate_sub_bounds(n);
+                    non_null_eq_idx.push(idx);
+                }
+                None => (),
+            }
+        }
+
+        // now, translate the equations to be at the start of the equations buffer
+        if !non_null_eq_idx.is_empty() && non_null_eq_idx[0] > 0 {
+            let new_pivot_idx = non_null_eq_idx[0];
+            for idx in non_null_eq_idx {
+                self.equations[idx - new_pivot_idx] = self.equations[idx].take()
+            }
         }
     }
 
