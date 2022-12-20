@@ -213,6 +213,20 @@ impl Equation {
         }
     }
 
+    // subtracts the bounds by n such that the pivot is now equal to max(0, pivot - n)
+    pub fn saturate_sub_bounds(&mut self, mut n: SymbolID) {
+        self.bounds = match self.bounds {
+            EquationBounds::Bounds { pivot, last_nonzero_id } => {
+                if n > pivot {
+                    n = pivot;
+                }
+                EquationBounds::Bounds { pivot: pivot - n, last_nonzero_id: last_nonzero_id - n }
+            }
+            EquationBounds::EmptyBounds => EquationBounds::EmptyBounds,
+        };
+        self.constant_term.first_id = self.constant_term.first_id.saturating_sub(n);
+    }
+
     fn _recompute_min_bound(&mut self, from: SymbolID) -> bool {
         let from = std::cmp::max(from, self.constant_term.first_id);
         for (i, coef) in self.coefs[(from - self.constant_term.first_id) as usize..]

@@ -514,6 +514,29 @@ impl System {
         }
     }
 
+    /// subtracts the ids such that the pivot ID becomes pivot - n
+    pub fn saturate_sub_ids(&mut self, mut n: SymbolID) {
+        for eq in &mut self.equations {
+            match eq {
+                Some(eq) => eq.saturate_sub_bounds(n),
+                None => (),
+            }
+        }
+        self.bounds = match self.bounds {
+            SystemBounds::Bounds { first_equation_pivot_id, last_present_equation_pivot_id, largest_nonzero_id } => {
+                if n > first_equation_pivot_id {
+                    n = first_equation_pivot_id
+                }
+                SystemBounds::Bounds {
+                    first_equation_pivot_id: first_equation_pivot_id - n,
+                    last_present_equation_pivot_id: last_present_equation_pivot_id - n,
+                    largest_nonzero_id: largest_nonzero_id - n
+                }
+            }
+            SystemBounds::EmptyBounds => SystemBounds::EmptyBounds,
+        }
+    }
+
     pub fn clear(&mut self) {
         for eq_opt in self.equations.iter_mut() {
             eq_opt.take();
@@ -647,9 +670,7 @@ mod tests {
         }
     }
 
-    fn generate_symbols_for_ranges(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u32, symbols: &Vec<Symbol>, symbol_size: usize, zeroes_rate: f64, already_solved_rate: f64) {
-
-    }
+    
 
     #[test]
     fn add_several_full_equations_with_zeroes_in_coefs() {
