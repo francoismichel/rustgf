@@ -24,6 +24,7 @@ pub enum SystemError {
     InternalError(String),
 }
 
+#[derive(Debug)]
 pub struct System {
     bounds: SystemBounds,
     max_equations: u64,
