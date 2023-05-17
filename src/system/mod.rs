@@ -277,7 +277,7 @@ impl System {
         Ok(removed)
     }
 
-    fn reduce_equation(&self, new_equation: &mut Equation) -> Result<(), ()> {
+    fn reduce_equation(&self, new_equation: &mut Equation, field: Option<&galois_2p8::PrimitivePolynomialField>) -> Result<(), ()> {
         let mut n_non_null_equations = 0;
         for eq_opt in &self.equations {
             if n_non_null_equations >= self.n_equations {
@@ -302,8 +302,8 @@ impl System {
                         let coef = new_equation.get_coef(*eq_pivot);
                         if coef != 0 {
                             // reduce this coef in the new eq
-                            new_equation.mul(gf_tables::mul(gf_tables::inv(coef), eq.get_coef(*eq_pivot)));
-                            new_equation.add(eq)?;
+                            new_equation.mul(gf_tables::mul(gf_tables::inv(coef), eq.get_coef(*eq_pivot)), field);
+                            new_equation.add(eq, field)?;
                         }
                     }
                 }
@@ -326,12 +326,13 @@ impl System {
     pub fn add(
         &mut self,
         mut new_equation: Equation,
+        field: Option<&galois_2p8::PrimitivePolynomialField>
     ) -> Result<(Option<Equation>, Vec<SymbolID>), SystemError> {
         let mut decoded_symbol_ids = Vec::new();
 
         new_equation.recompute_bounds();
 
-        match self.reduce_equation(&mut new_equation) {
+        match self.reduce_equation(&mut new_equation, field) {
             Err(()) => {
                 return Err(InternalError("could not reduce the new equation".to_string()));
             }
@@ -362,9 +363,9 @@ impl System {
                         // the current equation has a non-null coef at the index of the pivot of the new equation
                         // let's reduce it
                         let new_equation_coef = new_equation.get_coef(first_id);
-                        new_equation.mul(gf_tables::mul(coef, gf_tables::inv(new_equation_coef)));
+                        new_equation.mul(gf_tables::mul(coef, gf_tables::inv(new_equation_coef)), field);
                         let has_one_id_before_add = eq.has_one_id();
-                        match eq.add(&new_equation){
+                        match eq.add(&new_equation, field){
                             Err(()) => {
                                 return Err(InternalError("could not add the equations".to_string()));
                             }
@@ -378,7 +379,7 @@ impl System {
                                 if is_decoded {
                                     let decoded_id = *eq_pivot;
                                     if eq.get_coef(decoded_id) != 1 {
-                                        eq.div(eq.get_coef(decoded_id));
+                                        eq.div(eq.get_coef(decoded_id), field);
                                     }
                                     decoded_symbol_ids.push(decoded_id);
                                 }
@@ -392,7 +393,7 @@ impl System {
 
 
         if new_equation.has_one_id() {
-            new_equation.normalize_pivot();
+            new_equation.normalize_pivot(field);
             if let EquationBounds::Bounds {
                 pivot: decoded_pivot,
                 ..
@@ -416,7 +417,7 @@ impl System {
         }
     }
 
-    pub fn take(&mut self, id: SymbolID) -> Option<Vec<u8>> {
+    pub fn take(&mut self, id: SymbolID, field: Option<&galois_2p8::PrimitivePolynomialField>) -> Option<Vec<u8>> {
         if let SystemBounds::Bounds {
             first_equation_pivot_id, last_present_equation_pivot_id, largest_nonzero_id: _
         } = self.bounds {
@@ -428,7 +429,7 @@ impl System {
             if !retval.has_one_id() {
                 return None;
             }
-            retval.normalize_pivot();
+            retval.normalize_pivot(field);
             self.recompute_bounds();
             return Some(retval.constant_term_data());
         }
@@ -602,20 +603,20 @@ mod tests {
         Standard.sample_iter(rng).take(size).collect()
     }
 
-    fn _generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, coefs: Vec<u8>, symbols: &Vec<Symbol>, symbol_size: usize) -> Equation {
+    fn _generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, coefs: Vec<u8>, symbols: &Vec<Symbol>, symbol_size: usize, field: Option<&galois_2p8::PrimitivePolynomialField>) -> Equation {
         let mut out_symbol = Symbol::new(first_coef_id, coefs.len() as u64, vec![0; symbol_size]);
         for (i, symbol) in symbols.iter().enumerate() {
-            out_symbol.add_mul(coefs[i], &symbols[i]);
+            out_symbol.add_mul(coefs[i], &symbols[i], field);
         }
         Equation::new(coefs, out_symbol)
     }
 
-    fn generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u64, symbols: &Vec<Symbol>, symbol_size: usize) -> Equation {
+    fn generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u64, symbols: &Vec<Symbol>, symbol_size: usize, field: Option<&galois_2p8::PrimitivePolynomialField>) -> Equation {
         let coefs = get_random_vec(rng, n_coefs as usize);
-        _generate_equation_from_payloads(rng, first_coef_id, coefs, symbols, symbol_size)
+        _generate_equation_from_payloads(rng, first_coef_id, coefs, symbols, symbol_size, field)
     }
 
-    fn generate_equation_from_payloads_with_zeroes(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u64, symbols: &Vec<Symbol>, symbol_size: usize, zeroes_rate: f64, already_solved_rate: f64) -> Equation {
+    fn generate_equation_from_payloads_with_zeroes(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID, n_coefs: u64, symbols: &Vec<Symbol>, symbol_size: usize, zeroes_rate: f64, already_solved_rate: f64, field: Option<&galois_2p8::PrimitivePolynomialField>) -> Equation {
         let mut coefs = get_random_vec(rng, n_coefs as usize);
         let already_solved = rng.gen_bool(already_solved_rate);
         let alone_index = rng.gen_range(0..n_coefs) as usize;
@@ -626,7 +627,7 @@ mod tests {
                 *coef = 0;
             }
         }
-        _generate_equation_from_payloads(rng, first_coef_id, coefs, symbols, symbol_size)
+        _generate_equation_from_payloads(rng, first_coef_id, coefs, symbols, symbol_size, field)
     }
 
     #[test]
@@ -644,16 +645,16 @@ mod tests {
                                                   n_protected_symbols as u64,
                                                   data));
         let mut solved_eq_copy = eq_clone(&solved_eq);
-        solved_eq_copy.normalize_pivot();
+        solved_eq_copy.normalize_pivot(None);
 
-        let result = system.add(solved_eq);
+        let result = system.add(solved_eq, None);
 
         assert!(matches!(result, Ok((None, _))));
 
         if let Ok((None, vec)) = result {
             assert_eq!(vec.len(), 1);
             assert_eq!(vec[0], lost_id);
-            let solved = system.take(lost_id).unwrap();
+            let solved = system.take(lost_id, None).unwrap();
             assert_eq!(solved, solved_eq_copy.constant_term_data());
 
         }
@@ -674,7 +675,7 @@ mod tests {
         }
         let mut decoded_ids: Vec<SymbolID> = Vec::new();
         for i in 0..n_symbols {
-            let result = system.add(generate_equation_from_payloads(&mut rng, first_id, n_symbols, &symbols, symbol_size));
+            let result = system.add(generate_equation_from_payloads(&mut rng, first_id, n_symbols, &symbols, symbol_size, None), None);
             let (removed, mut decoded) = result.unwrap();
             decoded_ids.append(&mut decoded);
         }
@@ -682,7 +683,7 @@ mod tests {
         assert_eq!(decoded_ids.len(), n_symbols as usize);
 
         for id in decoded_ids {
-            let solved = system.take(id).unwrap();
+            let solved = system.take(id, None).unwrap();
             assert_eq!(&solved, symbols[id as usize - first_id as usize].get_data());
         }
     }
@@ -705,7 +706,7 @@ mod tests {
         }
         let mut decoded_ids: Vec<SymbolID> = Vec::new();
         for i in 0..(((n_symbols as f64)*system_oversize_ratio) as u32) {
-            let result = system.add(generate_equation_from_payloads_with_zeroes(&mut rng, first_id, n_symbols, &symbols, symbol_size, 0.3, 0.1));
+            let result = system.add(generate_equation_from_payloads_with_zeroes(&mut rng, first_id, n_symbols, &symbols, symbol_size, 0.3, 0.1, None), None);
             match result {
                 Ok((removed, mut decoded)) => {
                     decoded_ids.append(&mut decoded);
@@ -720,7 +721,7 @@ mod tests {
         assert_eq!(decoded_ids.len(), n_symbols as usize);
 
         for id in decoded_ids {
-            let solved = system.take(id).unwrap();
+            let solved = system.take(id, None).unwrap();
             assert_eq!(&solved, symbols[id as usize - first_id as usize].get_data());
         }
     }

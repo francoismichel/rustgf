@@ -21,7 +21,7 @@ fn generate_equation_from_payloads(rng: &mut Lcg64Xsh32, first_coef_id: SymbolID
     let coefs = get_random_vec(rng, n_coefs as usize);
     let mut out_symbol = Symbol::new(first_coef_id, n_coefs, vec![0; symbol_size]);
     for (i, _) in symbols.iter().enumerate() {
-        out_symbol.add_mul(coefs[i], &symbols[i]);
+        out_symbol.add_mul(coefs[i], &symbols[i], None);
     }
     Equation::new(coefs, out_symbol)
 }
@@ -48,7 +48,7 @@ fn add_several_full_equations() {
 
     let start = Instant::now();
     for equation in equations {
-        let result = system.add(equation);
+        let result = system.add(equation, None);
         let (_, mut decoded) = result.unwrap();
         decoded_ids.append(&mut decoded);
     }
@@ -58,7 +58,7 @@ fn add_several_full_equations() {
     assert_eq!(decoded_ids.len(), n_symbols as usize);
 
     for id in decoded_ids {
-        let solved = system.take(id).unwrap();
+        let solved = system.take(id, None).unwrap();
         assert_eq!(&solved, symbols[id as usize - first_id as usize].get_data());
     }
 }

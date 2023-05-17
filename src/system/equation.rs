@@ -57,7 +57,7 @@ impl Equation {
         return self.constant_term.take_data();
     }
 
-    pub fn add(&mut self, other: &Equation) -> Result<(), ()> {
+    pub fn add(&mut self, other: &Equation, field: Option<&galois_2p8::PrimitivePolynomialField>) -> Result<(), ()> {
         assert_eq!(
             self.constant_term.n_protected_symbols as usize,
             self.coefs.len()
@@ -124,12 +124,13 @@ impl Equation {
 
             // here self.coef is at least (largest_nonzero_coef_id + 1) - smallest_pivot long and at least as large as other.coefs
 
-            self.constant_term.add(&other.constant_term);
+            self.constant_term.add(&other.constant_term, field);
             let other_pivot_index_in_self = self._get_coef_index(other_pivot)?;
             let other_pivot_index_in_other = other._get_coef_index(other_pivot)?;
             arithmetic::xor(
                 &mut self.coefs[other_pivot_index_in_self..],
                 &other.coefs[other_pivot_index_in_other..],
+                field
             );
             self._recompute_bounds(smallest_pivot, largest_nonzero_coef_id);
         }
@@ -145,26 +146,26 @@ impl Equation {
         Ok(())
     }
 
-    pub fn mul(&mut self, coef: u8) {
-        arithmetic::mul(&mut self.coefs[..], coef);
-        self.constant_term.mul(coef);
+    pub fn mul(&mut self, coef: u8, field: Option<&galois_2p8::PrimitivePolynomialField>) {
+        arithmetic::mul(&mut self.coefs[..], coef, field);
+        self.constant_term.mul(coef, field);
     }
 
-    pub fn div(&mut self, coef: u8) {
-        arithmetic::div(&mut self.coefs[..], coef);
-        self.constant_term.div(coef);
+    pub fn div(&mut self, coef: u8, field: Option<&galois_2p8::PrimitivePolynomialField>) {
+        arithmetic::div(&mut self.coefs[..], coef, field);
+        self.constant_term.div(coef, field);
     }
 
-    pub fn add_mul(&mut self, coef: u8, other: &Equation) {
+    pub fn add_mul(&mut self, coef: u8, other: &Equation, field: Option<&galois_2p8::PrimitivePolynomialField>) {
         assert!(
             self.coefs.len() == other.coefs.len(),
             "equation coefs mismatch !"
         );
-        arithmetic::add_mul(&mut self.coefs[..], coef, &other.coefs[..]);
-        self.constant_term.add_mul(coef, &other.constant_term);
+        arithmetic::add_mul(&mut self.coefs[..], coef, &other.coefs[..], field);
+        self.constant_term.add_mul(coef, &other.constant_term, field);
     }
 
-    pub fn reduce(&mut self, symbol: &Symbol) -> Result<(), EquationError> {
+    pub fn reduce(&mut self, symbol: &Symbol, field: Option<&galois_2p8::PrimitivePolynomialField>) -> Result<(), EquationError> {
         if symbol.n_protected_symbols != 1 {
             return Err(BadSymbol);
         }
@@ -175,7 +176,7 @@ impl Equation {
                 if symbol.first_id < pivot || last_nonzero_id < symbol.first_id {
                     return Err(OutOfEquation);
                 }
-                self.constant_term.add_mul(self.get_coef(symbol.first_id), symbol);
+                self.constant_term.add_mul(self.get_coef(symbol.first_id), symbol, field);
                 match self.set_coef(symbol.first_id, 0) {
                     Err(()) => Err(InternalError),
                     Ok(()) => Ok(()),
@@ -198,7 +199,7 @@ impl Equation {
         }
     }
 
-    pub fn normalize_pivot(&mut self) {
+    pub fn normalize_pivot(&mut self, field: Option<&galois_2p8::PrimitivePolynomialField>) {
         match self.bounds() {
             Bounds {
                 pivot,
@@ -206,7 +207,7 @@ impl Equation {
             } => {
                 let pivot_coef = self.get_coef(*pivot);
                 if pivot_coef != 1 {
-                    self.div(pivot_coef);
+                    self.div(pivot_coef, field);
                 }
             },
             EmptyBounds => {},
@@ -599,10 +600,10 @@ mod tests {
 
         let mut xored_coefs = eq1_clone.coefs.to_vec();
         let mut xored_constant_term = eq1_clone.constant_term.get_data().to_vec();
-        arithmetic::xor(&mut xored_coefs, &eq2.coefs);
-        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data());
+        arithmetic::xor(&mut xored_coefs, &eq2.coefs, None);
+        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data(), None);
 
-        assert!(matches!(eq1.add(&eq2), Ok(())));
+        assert!(matches!(eq1.add(&eq2, None), Ok(())));
 
         check_equation(
             &eq1,
@@ -625,10 +626,10 @@ mod tests {
         let mut xored_constant_term = eq1_clone.constant_term.get_data().to_vec();
 
         // 0..17 and 51..60 stay unchanged
-        arithmetic::xor(&mut xored_coefs[18..41], &eq2.coefs);
-        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data());
+        arithmetic::xor(&mut xored_coefs[18..41], &eq2.coefs, None);
+        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data(), None);
 
-        assert!(matches!(eq1.add(&eq2), Ok(())));
+        assert!(matches!(eq1.add(&eq2, None), Ok(())));
 
         check_equation(
             &eq1,
@@ -651,12 +652,12 @@ mod tests {
         xored_coefs.resize(100, 0);
         xored_coefs.rotate_right(9);
         // 0..8 and 55..150 stay unchanged
-        arithmetic::xor(&mut xored_coefs, &eq2.coefs);
+        arithmetic::xor(&mut xored_coefs, &eq2.coefs, None);
         let mut xored_constant_term = eq1_clone.constant_term.get_data().to_vec();
 
-        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data());
+        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data(), None);
 
-        assert!(matches!(eq1.add(&eq2), Ok(())));
+        assert!(matches!(eq1.add(&eq2, None), Ok(())));
 
         check_equation(
             &eq1,
@@ -677,12 +678,12 @@ mod tests {
 
         let mut xored_coefs = eq2.coefs.to_vec(); // eq2 is larger so eq2's coefs are the base for our xor
                                                   // 0..8 and 55..150 stay unchanged
-        arithmetic::xor(&mut xored_coefs[9..55], &eq1.coefs);
+        arithmetic::xor(&mut xored_coefs[9..55], &eq1.coefs, None);
         let mut xored_constant_term = eq1_clone.constant_term.get_data().to_vec();
 
-        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data());
+        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data(), None);
 
-        assert!(matches!(eq1.add(&eq2), Ok(())));
+        assert!(matches!(eq1.add(&eq2, None), Ok(())));
 
         check_equation(
             &eq1,
@@ -714,12 +715,12 @@ mod tests {
         }
 
         let mut xored_coefs = eq2.coefs.to_vec(); // eq2 is larger so eq2's coefs are the base for our xor
-        arithmetic::xor(&mut xored_coefs[6..156], &eq1_clone.coefs);
+        arithmetic::xor(&mut xored_coefs[6..156], &eq1_clone.coefs, None);
 
         let mut xored_constant_term = eq1_clone.constant_term.get_data().to_vec();
-        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data());
+        arithmetic::xor(&mut xored_constant_term, &eq2.constant_term.get_data(), None);
 
-        assert!(matches!(eq1.add(&eq2), Ok(())));
+        assert!(matches!(eq1.add(&eq2, None), Ok(())));
         if let Bounds {
             pivot: eq1_pivot,
             last_nonzero_id: eq1_last_nonzero_id,

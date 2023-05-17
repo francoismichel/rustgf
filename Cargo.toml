@@ -14,3 +14,9 @@ path = "src/example.rs"
 [dependencies]
 rand = "0.8.4"
 rand_pcg = "0.3.1"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+galois_2p8 = { version = "0.1.2", features = ["simd"]}
+
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
+galois_2p8 = "0.1.2"

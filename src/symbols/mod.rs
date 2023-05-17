@@ -19,28 +19,28 @@ impl Symbol {
         }
     }
 
-    pub fn add(&mut self, other: &Symbol) {
+    pub fn add(&mut self, other: &Symbol, field: Option<&galois_2p8::PrimitivePolynomialField>) {
         assert!(
             self.data.len() == other.data.len(),
             "symbols size mismatch !"
         );
-        arithmetic::xor(&mut self.data, &other.data);
+        arithmetic::xor(&mut self.data, &other.data, field);
     }
 
-    pub fn mul(&mut self, coef: u8) {
-        arithmetic::mul(&mut self.data, coef);
+    pub fn mul(&mut self, coef: u8, field: Option<&galois_2p8::PrimitivePolynomialField>) {
+        arithmetic::mul(&mut self.data, coef, field);
     }
 
-    pub fn div(&mut self, coef: u8) {
-        arithmetic::div(&mut self.data, coef);
+    pub fn div(&mut self, coef: u8, field: Option<&galois_2p8::PrimitivePolynomialField>) {
+        arithmetic::div(&mut self.data, coef, field);
     }
 
-    pub fn add_mul(&mut self, coef: u8, other: &Symbol) {
+    pub fn add_mul(&mut self, coef: u8, other: &Symbol, field: Option<&galois_2p8::PrimitivePolynomialField>) {
         assert!(
             self.data.len() == other.data.len(),
             "symbols size mismatch !"
         );
-        arithmetic::add_mul(&mut self.data, coef, &other.data);
+        arithmetic::add_mul(&mut self.data, coef, &other.data, field);
     }
 
     pub fn first_id(&self) -> SymbolID {
