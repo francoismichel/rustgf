@@ -45,6 +45,10 @@ impl System {
         }
     }
 
+    pub fn nb_equations(&self) -> u64 {
+        self.n_equations
+    }
+
     pub fn bounds(&self) -> &SystemBounds {
         &self.bounds
     }
