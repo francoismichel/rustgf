@@ -4,7 +4,7 @@ use crate::symbols::SymbolID;
 use crate::system::equation::EquationBounds::{Bounds, EmptyBounds};
 use crate::system::equation::EquationError::{BadSymbol, InternalError, OutOfEquation};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum EquationError {
     BadSymbol,
     OutOfEquation,
